@@ -185,7 +185,7 @@ plogis(cjs.result$BUGSoutput$mean$b0.phi)^as.numeric(enddate-startdate+1)*plogis
 # JAGS code for CJS model
 #
 
-sink( "cjs_phiJune_July_sept_pdot.txt" )  # writes code below to a text file
+sink( "cjs_phi.migr_pdot.length.txt" )  # writes code below to a text file
 cat("
   model {
     # priors
@@ -288,7 +288,7 @@ nc <- 3
 cjs.result <- jags( cjs.data, 
                     cjs.inits,
                     cjs.parms,
-                    "cjs_phiJune_July_sept_pdot.txt",
+                    "cjs_phi.migr_pdot.length.txt",
                     n.chains=nc, 
                     n.iter=ni, 
                     n.burnin=10,
