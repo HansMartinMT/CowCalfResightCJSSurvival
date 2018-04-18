@@ -5,3 +5,68 @@ date: "April 17, 2018"
 output: html_document
 ---
 
+```{r}
+library(lubridate)
+library(dplyr)
+library(R2jags)
+library(mcmcplots)
+library(tidyr)
+```
+
+```{r}
+calfobs<-read.csv("ELK_CALF_OBSERVATIONS.csv", stringsAsFactors = F)
+calfobs$Date<-as.Date(calfobs$DATE, format="%m/%d/%Y")
+calfobs$JDate<-format(calfobs$Date, "%j")
+#select dates between July 1 2017 and August 31st 2017
+startdate<-as.Date("2017-07-01")
+enddate<-as.Date("2017-08-31")
+calfobs<-calfobs %>% filter(Date >=startdate & Date<=enddate  )
+calfobs$IDFactor<-as.numeric(as.factor(calfobs$ELK.ID))
+calfobs$period<-as.numeric(calfobs$JDate)-as.numeric(format(startdate, "%j"))+2
+
+nobs<-enddate-startdate+2
+nanimals<-length(unique(calfobs$ELK.ID))
+EH<-matrix(data=NA,nrow=nanimals, ncol=nobs)
+
+
+for(i in 1:nrow(calfobs)){
+  EH[calfobs$IDFactor[i],calfobs$period[i]]<-calfobs$CALF.PRESENT.[i]
+}
+
+```
+
+```{r}
+
+
+
+  model {
+    # priors
+    b0.phi ~ dnorm( 0, 0.001 )T(-10,10) #prior for the apparent survival parameter
+    b0.p ~ dnorm( 0, 0.001 )T(-10,10) #prior for the recapture probability
+    b.preg.surv.r.phi ~ dnorm( 0, 0.001 )T(-10,10) #prior for the survival*pregnancy of the first occasion
+    logit(mean.p) <- b0.p #log link of the function
+    
+    
+    for( i in 1:nind ){ #loops through the encounter history of all individuals
+      for( t in f[i]:(nocc-1) ){ #loops through the encounter occasions for the individual i.
+        logit(mean.phi[i,t]) <- b0.phi+b.preg.surv.r.phi*(t==1)
+        phi[i,t] <- mean.p
+        p[i,t] <- mean.phi[i,t]
+      }
+    }
+    
+    # likelihood
+    for( i in 1:nind ){
+      z[i,f[i]] <- 1
+      for( t in (f[i]+1):nocc ){
+        # state
+        z[i,t] ~ dbern( mu1[i,t] ) #
+        mu1[i,t] <- phi[i, t-1] * z[i,t-1]
+        # observation
+        y[i,t] ~ dbern( mu2[i,t] )
+        mu2[i,t] <- p[i,t-1] * z[i,t]
+      }
+    }
+  
+  }
+```
