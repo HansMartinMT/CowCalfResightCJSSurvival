@@ -20,9 +20,17 @@ calfobs$JDate<-format(calfobs$Date, "%j")
 #select dates between July 1 2017 and August 31st 2017
 startdate<-as.Date("2017-07-01")
 enddate<-as.Date("2018-03-31")
+
 calfobs<-calfobs %>% filter(Date >=startdate & Date<=enddate  )
+elkidsobserved<-unique(calfobs$ELK.ID)
+write.csv(elkidsobserved, "observedtaggedelk2017.csv")
 calfobs$IDFactor<-as.numeric(as.factor(calfobs$ELK.ID))
 calfobs$period<-as.numeric(calfobs$JDate)-as.numeric(format(startdate, "%j"))+2
+migr<-read.csv("tpresabs2017yr_month_migration_classified.csv",stringsAsFactors = F)
+migr1<- migr %>% filter(year_month=="2017-06") %>% distinct(ID,year_month,.keep_all=TRUE) %>% select(ID, VisualClass)
+
+calfobs<-left_join(calfobs, migr1, by =c("ELK.ID"="ID") )
+
 
 nobs<-enddate-startdate+2
 nanimals<-length(unique(calfobs$ELK.ID))
@@ -42,7 +50,7 @@ EH[,1]<-1
 # JAGS code for CJS model
 #
 
-sink( "cjs_phidot_pdot.txt" )  # writes code below to a text file
+sink( "cjs_phiJune_July_sept_pdot.txt" )  # writes code below to a text file
 cat("
   model {
     # priors
