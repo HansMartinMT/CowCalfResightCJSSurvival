@@ -5,7 +5,7 @@ date: "April 17, 2018"
 output: html_document
 ---
 
-```{r}
+```{r message=F}
 library(lubridate)
 library(dplyr)
 library(R2jags)
@@ -19,7 +19,7 @@ calfobs$Date<-as.Date(calfobs$DATE, format="%m/%d/%Y")
 calfobs$JDate<-format(calfobs$Date, "%j")
 #select dates between July 1 2017 and August 31st 2017
 startdate<-as.Date("2017-07-01")
-enddate<-as.Date("2017-08-31")
+enddate<-as.Date("2018-03-31")
 calfobs<-calfobs %>% filter(Date >=startdate & Date<=enddate  )
 calfobs$IDFactor<-as.numeric(as.factor(calfobs$ELK.ID))
 calfobs$period<-as.numeric(calfobs$JDate)-as.numeric(format(startdate, "%j"))+2
@@ -33,6 +33,127 @@ for(i in 1:nrow(calfobs)){
   EH[calfobs$IDFactor[i],calfobs$period[i]]<-calfobs$CALF.PRESENT.[i]
 }
 
+EH[,1]<-1
+
+```
+
+```{r}
+
+# JAGS code for CJS model
+#
+
+sink( "cjs_phidot_pdot.txt" )  # writes code below to a text file
+cat("
+  model {
+    # priors
+    b0.phi ~ dnorm( 0, 0.001 )T(-12,12) #prior for the apparent survival parameter
+    b0.p ~ dnorm( 0, 0.001 )T(-12,12) #prior for the recapture probability
+    b.survbirth.phi~dnorm( 0, 0.001 )T(-12,12)
+    #logit(mean.phi) <- b0.phi #log link of the function
+    logit(mean.p) <- b0.p
+    
+    for( i in 1:nind ){ #loops through the encounter history of all individuals
+      for( t in f[i]:(nocc-1) ){ #loops through the encounter occasions for the individual i.
+
+          logit(mean.phi[i,t]) <- b0.phi + b.survbirth.phi*(t==1) #log link of the function     
+
+          phi[i,t] <- mean.phi[i,t]
+
+        p[i,t] <- mean.p
+      }
+    }
+    
+    # likelihood
+    for( i in 1:nind ){
+      z[i,f[i]] <- 1
+      for( t in (f[i]+1):nocc ){
+        # state
+        z[i,t] ~ dbern( mu1[i,t] ) #
+        mu1[i,t] <- phi[i, t-1] * z[i,t-1]
+        # observation
+        y[i,t] ~ dbern( mu2[i,t] )
+        mu2[i,t] <- p[i,t-1] * z[i,t]
+      }
+    }
+  
+  }
+", fill=TRUE)
+sink()  # stop writing to the text file
+
+# read data file 
+#dipper <- read.csv( "DIPPER.csv" )
+
+# make encounter history matrix
+#EH <- as.matrix( dipper[,1:7] )
+
+nObs <- ncol( EH )
+nAnimal <- nrow( EH )
+
+# determine the occasion of the first capture of each individual
+get.first <- function(x){
+# a function to identify the time period of the first capture from an encounter history matrix
+  return( min(which( x != 0 ) ,na.rm=T) )
+}
+fall <- apply( EH, 1, get.first )
+
+# remove animals caught only in last year
+#EH <- EH[-which(fall==nYears),]
+#f <- fall[-which(fall==nYears)]
+f <- fall#[-which(fall==nYears)]
+nAnimal <- nrow( EH )
+
+# Define a list of data to be passed to JAGS
+cjs.data <- list( y=EH, f=f, nind=nAnimal, nocc=nObs )
+
+# Define a function to generate the initial values and return them as a list
+ch.init <- function( ch, f ){
+  for( i in 1:dim(ch)[1] ){
+    ch[i,]<-0
+    ch[i,1:f[i]] <- NA
+  }
+  return(ch)
+}
+z <- ch.init( EH, f )    # z is partially observed, so has to agree with y
+z <- ifelse( !is.na(z), 1, z )
+cjs.inits <- function(){
+  list(
+    z = z,
+    b0.phi = runif(1, -3, 3),
+    b0.p = runif(1, -3, 3),
+    b.survbirth.phi = runif(1, -3, 3)
+  )
+}
+
+# set parameters to track in JAGS
+cjs.parms <- c("b0.phi", "b0.p","b.survbirth.phi")#,"mean.phi", "mean.p")
+
+# set up for MCMC run
+ni <- 10000
+nt <- 10
+nb <- 9000
+nc <- 3
+
+# run the MCMC chain in JAGS
+cjs.result <- jags( cjs.data, 
+                    cjs.inits,
+                    cjs.parms,
+                    "cjs_phidot_pdot.txt",
+                    n.chains=nc, 
+                    n.iter=ni, 
+                    n.burnin=10,
+                    n.thin=1
+                  )
+mcmcplot(cjs.result)
+summary(cjs.result)
+cjs.result$BUGSoutput
+```
+Survival rate * pregnancy rate from birth to July
+```{r}
+plogis(cjs.result$BUGSoutput$mean$b.survbirth.phi+cjs.result$BUGSoutput$mean$b0.phi)
+```
+Survival rate from July to March
+```{r}
+plogis(cjs.result$BUGSoutput$mean$b0.phi)^as.numeric(enddate-startdate+1)*plogis(cjs.result$BUGSoutput$mean$b.survbirth.phi+cjs.result$BUGSoutput$mean$b0.phi)
 ```
 
 ```{r}
