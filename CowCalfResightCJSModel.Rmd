@@ -6,11 +6,13 @@ output: html_document
 ---
 
 ```{r message=F}
+
 library(lubridate)
 library(dplyr)
 library(R2jags)
 library(mcmcplots)
 library(tidyr)
+
 ```
 
 ```{r}
