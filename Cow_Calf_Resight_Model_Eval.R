@@ -53,8 +53,8 @@ cjs.result3 <- jags.parallel(
 )
 
 results1<-tibble::tibble(
-  Surv=cjs.result$BUGSoutput$mean$annual[1,],
-  SD=cjs.result$BUGSoutput$sd$annual[1,],
+  Surv=cjs.result3$BUGSoutput$mean$annual[1,],
+  SD=cjs.result3$BUGSoutput$sd$annual[1,],
   Year=year_index_lookup %>% arrange(Index_year) %>% pull(Year)) %>% 
   mutate(LCI=Surv-(2*SD),
          UCI=Surv+(2*SD),
@@ -62,8 +62,8 @@ results1<-tibble::tibble(
   ) 
 
 results2<-tibble::tibble(
-  Surv=cjs.result$BUGSoutput$mean$annual[2,],
-  SD=cjs.result$BUGSoutput$sd$annual[2,],
+  Surv=cjs.result3$BUGSoutput$mean$annual[2,],
+  SD=cjs.result3$BUGSoutput$sd$annual[2,],
   Year=year_index_lookup %>% arrange(Index_year) %>% pull(Year)) %>% 
   mutate(LCI=Surv-(2*SD),
          UCI=Surv+(2*SD),
@@ -80,7 +80,7 @@ results3<-tibble::tibble(
 
 results<-bind_rows(results1,results2) %>% 
   select(Year,Migr,Surv,SD,LCI,UCI) 
-write.csv(results,"results_cjs_nTime_MigRes_nCov.csv")  
+write.csv(results,"results_cjs_TimeY_MigRes_Density.csv")  
 
 results %>% ggplot2::ggplot(aes(x=Year,y=Surv,color=Migr))+
   geom_point()+

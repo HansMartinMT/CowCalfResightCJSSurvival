@@ -38,6 +38,12 @@ MigratoryStatus <- MigratoryStatus %>%
 
 month_lookup_table<-tibble::tibble(index_month=c(1:11),named_month=c("june","july","aug","sept","oct","nov","dec","jan","feb","mar","april"),numeric_month=c(6,7,8,9,10,11,12,1,2,3,4))
 
+#Adding density population estimates as a covariate
+
+pop_data<-readr::read_csv("C:/Users/Hans Martin/Documents/GitHub/YHTElkSurvivalDataFlow/Data/2003_2017WinterElkSurvey.csv")
+
+
+
 Calf_Obs_Data<-Calf_Obs %>%
   mutate(ElkEarTagID = stringr::str_trim(toupper(`ELK ID`), side = c("both")),
          ElkEarTagID = stringr::str_replace_all(ElkEarTagID, " ", "")) %>%
@@ -60,19 +66,22 @@ Calf_Obs_Data<-Calf_Obs %>%
   left_join(MigratoryStatus, by=c("elkid"="elkid","Bio_year"="year")) %>% 
   left_join(Immob,c("elkid"="elkid","Bio_year"="Year")) %>%
   unite(col=elkid_year,c("elkid","Bio_year"),sep="_",remove = F) %>%
+  left_join(pop_data, by=c("Bio_year"="Year")) %>% 
   ##########
 #FILTERS
 ##########
   filter(Month!=5) %>% 
-  filter(Bio_year %in% c(2002,2003,2004,2017,2018)) %>%
+  #filter(Bio_year<2019) %>% 
+  filter(Bio_year %in% c(2003,2004,2010,2011,2017,2018)) %>%
 ##########
-  group_by(elkid_year) %>% 
+  group_by(elkid_year) %>%
+  ungroup() %>% 
   mutate(
     Col=surv_build_interval(
       Date,
       start =as.Date(paste("6/1/",Bio_year, sep=""),"%m/%d/%Y"),
-      time_int = "week",
-      increment=2),
+      time_int = "month",
+      increment=1),
     ID=elkid_year,
     State1=`CALF PRESENT?`,
     MigrationSegment=replace(MigratorySegmentofPop,MigratorySegmentofPop=="unk",NA),
@@ -98,9 +107,12 @@ EH_Calf_Obs<-Calf_Obs_Data%>%
 EH_Month<-Calf_Obs_Data %>%
   
   #mutate(Index_month=as.integer(factor(Month))) %>% 
-  group_by(ID,Col) %>%
-  
-  summarise(index_month=max(index_month))%>% 
+  group_by(ID,Col,index_month) %>%
+  count(index_month) %>% 
+  group_by(ID,Col) %>% 
+  filter(n==max(n)) %>% 
+  filter(1:n()==1) %>% 
+  #summarise(index_month=max(index_month))%>% 
   surv_build_eh(vars=index_month,F) %>% 
   summarize_all(surv_smrz_safe
   ) %>% 
@@ -114,7 +126,11 @@ EH_Year<-  EH_Calf_Obs %>%
   mutate(
     Year=as.integer(substrRight(ID,4)),
     Index_year=as.integer(as.factor(Year))
-    )
+    ) %>% 
+  left_join(pop_data,c("Year"="Year"))%>% 
+  mutate(Dens_sc=scale(Count))
+
+year_index_lookup<-EH_Year %>% distinct(Year,Index_year)
 
 EH_Migr<-  EH_Calf_Obs %>% 
   mutate(
@@ -140,6 +156,7 @@ YHT.Calf.Obs.Data<-list(
   eh=EH_Calf_Obs %>% select(-ID),
   f=first_last %>% pull(f),
   year=EH_Year %>% pull(Index_year),
+  dens=EH_Year %>% pull(Dens_sc) %>% as.vector(.),
   month=EH_Month,
   nmonth=11,
   migr=EH_Migr %>% pull(Index_migration),
@@ -151,3 +168,4 @@ YHT.Calf.Obs.Data<-list(
   nmigr2=2
   )
   
+Calf_Obs_Data %>% group_by(Bio_year,MigrationSegment) %>% summarise(individuals=n_distinct(elkid)) %>% spread(MigrationSegment,individuals)
