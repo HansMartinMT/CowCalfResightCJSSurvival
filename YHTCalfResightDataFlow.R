@@ -36,6 +36,8 @@ MigratoryStatus <- MigratoryStatus %>%
   select(elkid, year, MigratorySegmentofPop, MigrationRoute) %>% 
   unite(col=elkid_year,c("elkid","year"),sep="_",remove = F)
 
+month_lookup_table<-tibble::tibble(index_month=c(1:11),named_month=c("june","july","aug","sept","oct","nov","dec","jan","feb","mar","april"),numeric_month=c(6,7,8,9,10,11,12,1,2,3,4))
+
 Calf_Obs_Data<-Calf_Obs %>%
   mutate(ElkEarTagID = stringr::str_trim(toupper(`ELK ID`), side = c("both")),
          ElkEarTagID = stringr::str_replace_all(ElkEarTagID, " ", "")) %>%
@@ -54,6 +56,7 @@ Calf_Obs_Data<-Calf_Obs %>%
     
     
 ) %>% 
+  left_join(month_lookup_table,by=c("Month"="numeric_month")) %>% 
   left_join(MigratoryStatus, by=c("elkid"="elkid","Bio_year"="year")) %>% 
   left_join(Immob,c("elkid"="elkid","Bio_year"="Year")) %>%
   unite(col=elkid_year,c("elkid","Bio_year"),sep="_",remove = F) %>%
@@ -61,7 +64,7 @@ Calf_Obs_Data<-Calf_Obs %>%
 #FILTERS
 ##########
   filter(Month!=5) %>% 
-  filter(Bio_year>=2002) %>%
+  filter(Bio_year %in% c(2002,2003,2004,2017,2018)) %>%
 ##########
   group_by(elkid_year) %>% 
   mutate(
@@ -89,18 +92,22 @@ EH_Calf_Obs<-Calf_Obs_Data%>%
   surv_build_eh(vars=State,F) %>% 
   mutate('0'=1)#%>%  
   #select(-ID)
-
+##################################
+#################################
+#STOPED HERE
 EH_Month<-Calf_Obs_Data %>%
-  ungroup() %>% 
-  mutate(Index_month=as.integer(as.factor(Month))) %>% 
-  group_by(ID,Col) %>% 
-  summarise(Month=median(Index_month))%>% 
-  surv_build_eh(vars=Month,F) %>% 
+  
+  #mutate(Index_month=as.integer(factor(Month))) %>% 
+  group_by(ID,Col) %>%
+  
+  summarise(index_month=max(index_month))%>% 
+  surv_build_eh(vars=index_month,F) %>% 
   summarize_all(surv_smrz_safe
   ) %>% 
   ungroup() %>%  
-  select(-1,-2)
-
+  select(-1,-2) %>% 
+  as.numeric(.)
+#month_lookup_table<-tibble::tibble(indexmonth=c(1:11),month=c("june","july","aug","sept","oct","nov","dec","jan","feb","mar","april"),numeric_month=c(6,7,8,9,10,11,12,1,2,3,4))
 
 EH_Year<-  EH_Calf_Obs %>% 
   select(ID) %>% 
@@ -116,9 +123,10 @@ EH_Migr<-  EH_Calf_Obs %>%
   left_join(MigratoryStatus, by=c("ID"="elkid_year")) %>% 
   mutate( 
     MigrationSegment=replace(MigratorySegmentofPop,MigratorySegmentofPop=="unk",NA),
-    Index_migration=as.integer(factor(MigrationSegment,levels=c("resident","east","west")))
+    Index_migration=as.integer(factor(MigrationSegment,levels=c("resident","east","west"))),
+    Index_mig_res=replace(Index_migration,Index_migration==3,2)
     ) %>% 
-  select(ID,Index_migration)
+  select(ID,Index_mig_res,Index_migration)
 
 first_last <- Calf_Obs_Data%>%
   group_by(ID) %>% 
@@ -138,6 +146,8 @@ YHT.Calf.Obs.Data<-list(
   nmigr=3,
   nyear=max(EH_Year$Index_year),
   nind=nrow(EH_Calf_Obs),
-  nocc=max(Calf_Obs_Data$Col)
+  nocc=max(Calf_Obs_Data$Col),
+  migr2=EH_Migr %>% pull(Index_mig_res),
+  nmigr2=2
   )
   
